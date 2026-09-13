@@ -22,3 +22,11 @@
 **Bad:** Initial build failed due to missing include; self-corrected in same step.
 **Tests:** `cmake -B build -S . && cmake --build build --config Debug && ./build/sft_tests --gtest_filter='Entities.*'` (2/2 PASS)
 **Context checkpoint:** 28%
+
+## Step 3 — 2026-09-13 Task 3 (Lane-B) — Ports + in-memory/fake adapters
+**Intent:** Define abstract ports (Repository, IStorage, IEncryptionProvider, IAuditLogger, IAccessPolicy) and provide in-memory/fake implementations for Stage-0 testing.
+**Approach:** Created 5 port interfaces under include/ports/ and 4 fake implementations under include/infrastructure/: memory_repo.hpp (template InMemoryRepo), fake_crypto.hpp (XOR 0x5A + FNV tag), memory_storage.hpp (unordered_map), vector_audit.hpp (hash-chain stub with seq/prevHash/msgHash). FakeCrypto throws IntegrityException on tag mismatch.
+**Good:** 2/2 tests pass (RoundTripAndTamper, StorageWriteRead). Tamper detection works via FNV digest compare.
+**Bad:** None.
+**Tests:** `cmake -B build -S . && cmake --build build --config Debug && ./build/sft_tests --gtest_filter='Fakes.*'` (2/2 PASS)
+**Context checkpoint:** 38%
