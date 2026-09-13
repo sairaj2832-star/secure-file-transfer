@@ -1,0 +1,12 @@
+# Stage 1 Demo — real TLS auth lifecycle (port 5000)
+1. Generate cert if needed: `openssl req -x509 -newkey rsa:2048 -keyout certs/server.key -out certs/server.crt -days 30 -nodes -subj "/CN=127.0.0.1"` then `openssl x509 -fingerprint -sha256 -in certs/server.crt` → put hex (no colons, uppercase) into `config.example.ini [trust] fingerprint`, `cert_path=./certs/server.crt`, `key_path=./certs/server.key`.
+2. Server laptop: hotspot ON → `./build/sft_server.exe --port 5000` → on first run, server prompts `Create initial admin (username email password):` — enter `admin admin@local <strong-password>` interactively (or place `storage/bootstrap_admin.json` with 0600 perms before first run, deleted after use); note `SERVER IPv4 PORT 5000 FINGERPRINT=<hex>` (subsequent runs reuse SQLite `storage/users.db`; do NOT use `SFT_BOOTSTRAP_ADMIN=...` env var — visible via proc).
+3. Alice laptop: `./build/sft_client.exe --server <IPv4> --port 5000` → `r` register alice/alice@ex.com/Alice123! → `l` login → server prints `REGISTER_OK alice` / `LOGIN_OK alice`.
+4. Bob laptop: same → register bob/bob@ex.com/Bob123!! → login → server prints `REGISTER_OK bob` / `LOGIN_OK bob`.
+5. Restart server (Ctrl+C, rerun same cmd) → Alice/Bob `l` login again without re-register → proves SQLite persistence.
+6. Bob: `o` logout → server prints `LOGOUT bob`, next action with old token → `Login failed`.
+7. Admin: login as admin → `deactivate alice` → server prints `DEACTIVATE alice`; Alice `l` now → `Login failed`; admin `activate alice` → login OK.
+8. Non-admin alice tries `deactivate bob` → client `Admin denied`, server `ADMIN_DENIED alice`.
+9. TLS reject: client with wrong fingerprint `--fingerprint 00...00` → client prints `TLS authentication failed` and records client-side `TLS_FAIL` audit; server does NOT record `TLS_FAIL` for this case (client rejected before server handshake completes) — server-side `TLS_FAIL` only for server-detected handshake failures.
+10. Grep proof (PowerShell): `rg -a "SuperSecret" storage/users.db; if ($LASTEXITCODE -eq 0) { throw "FAIL plaintext in DB" } else { Write-Host "OK no plaintext in DB" }` and `rg "SuperSecret" storage/audit.log; if ($LASTEXITCODE -eq 0) { throw "FAIL plaintext in audit" }` — note DB grep must check for plaintext only, encoded `$argon2id$` hash is expected.
+Fallback: if hotspot blocked, use loopback `127.0.0.1:5000` with two client terminals; same assertions hold. Last active admin cannot be deactivated (expected `cannot deactivate last admin`).

@@ -8,7 +8,11 @@
 #include <filesystem>
 #include <fstream>
 static TrustConfig testTrust(){
-  TrustConfig c; c.certPath="./certs/test_server.crt"; c.keyPath="./certs/test_server.key"; c.caPath="./certs/test_server.crt";
+  TrustConfig c;
+  for(auto p : {"./certs/test_server.crt", "../certs/test_server.crt", "D:/OOPS/CP/certs/test_server.crt"}){
+    if(std::filesystem::exists(p)){ c.certPath=p; c.keyPath= std::string(p).substr(0, std::string(p).find("test_server.crt"))+"test_server.key"; c.caPath=p; break; }
+  }
+  if(c.certPath.empty()) c.certPath="./certs/test_server.crt";
   c.fingerprint = computeSha256Fingerprint(c.certPath);
   return c;
 }
@@ -36,14 +40,15 @@ TEST(TlsTransport, MismatchedFingerprintFailsClientSide) {
   EXPECT_THROW(client.connect("127.0.0.1", 50000), TransportException);
 }
 TEST(TlsTransport, NoVerifyNoneInProd) {
-  std::string src = [](){
-    std::ifstream f("src/infrastructure/asio_tls_transport.cpp");
-    return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-  }();
+  auto readSrc = [](const std::string& rel){
+    for(auto p : {rel, std::string("../")+rel, std::string("D:/OOPS/CP/")+rel}){
+      std::ifstream f(p);
+      if(f) return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    }
+    return std::string();
+  };
+  std::string src = readSrc("src/infrastructure/asio_tls_transport.cpp");
   EXPECT_EQ(src.find("verify_none"), std::string::npos);
-  std::string src2 = [](){
-    std::ifstream f("src/infrastructure/asio_tls_listener.cpp");
-    return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-  }();
+  std::string src2 = readSrc("src/infrastructure/asio_tls_listener.cpp");
   EXPECT_EQ(src2.find("verify_none"), std::string::npos);
 }
