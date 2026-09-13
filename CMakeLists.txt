@@ -1,6 +1,6 @@
 # CMakeLists.txt
 cmake_minimum_required(VERSION 3.20)
-project(secure_file_transfer CXX)
+project(secure_file_transfer C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POLICY_DEFAULT_CMP0135 NEW)
@@ -13,7 +13,20 @@ FetchContent_Declare(asio
   GIT_REPOSITORY https://github.com/chriskohlhoff/asio.git
   GIT_TAG asio-1-30-2
 )
-FetchContent_MakeAvailable(googletest asio)
+FetchContent_Declare(argon2
+  GIT_REPOSITORY https://github.com/P-H-C/phc-winner-argon2.git
+  GIT_TAG 20190702
+)
+FetchContent_MakeAvailable(googletest asio argon2)
+# Build argon2 static lib
+add_library(argon2 STATIC
+  ${argon2_SOURCE_DIR}/src/argon2.c
+  ${argon2_SOURCE_DIR}/src/core.c
+  ${argon2_SOURCE_DIR}/src/blake2/blake2b.c
+  ${argon2_SOURCE_DIR}/src/thread.c
+  ${argon2_SOURCE_DIR}/src/encoding.c
+  ${argon2_SOURCE_DIR}/src/ref.c)
+target_include_directories(argon2 PUBLIC ${argon2_SOURCE_DIR}/include)
 add_executable(sft_server server/main.cpp)
 add_executable(sft_client client/main.cpp)
 target_include_directories(sft_server PRIVATE include)
@@ -24,9 +37,10 @@ enable_testing()
 file(GLOB APP_SRCS src/*/*.cpp src/*/*/*.cpp)
 file(GLOB TEST_SRCS tests/*/*.cpp)
 add_library(sft_app STATIC ${APP_SRCS})
-target_include_directories(sft_app PRIVATE include ${CMAKE_BINARY_DIR}/_deps/asio-src/asio/include)
+target_include_directories(sft_app PRIVATE include ${CMAKE_BINARY_DIR}/_deps/asio-src/asio/include ${argon2_SOURCE_DIR}/include)
+target_link_libraries(sft_app PRIVATE argon2)
 add_executable(sft_tests ${TEST_SRCS})
-target_include_directories(sft_tests PRIVATE include)
-target_link_libraries(sft_tests PRIVATE gtest_main sft_app)
+target_include_directories(sft_tests PRIVATE include ${argon2_SOURCE_DIR}/include)
+target_link_libraries(sft_tests PRIVATE gtest_main sft_app argon2)
 include(GoogleTest)
 gtest_discover_tests(sft_tests)
