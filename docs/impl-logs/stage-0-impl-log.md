@@ -14,3 +14,11 @@
 **Bad:** CMake file(GLOB) for tests is not auto-rerun on new files; must re-run cmake (acceptable for Stage-0).
 **Tests:** `cmake -B build -S . && cmake --build build --config Debug && ./build/sft_tests --gtest_filter='Ids.*:DigestFnv.*:Result.*'` (3/3 PASS)
 **Context checkpoint:** 20%
+
+## Step 2 — 2026-09-13 Task 2 (Lane-A) — Domain entities: User, FileRecord, Transfer, Permission, DownloadToken, AuditEvent
+**Intent:** Implement domain entity types with ownership checks, transfer status machine, and token bind validation stub.
+**Approach:** Created 6 headers: user.hpp (User base + RegularUser/Administrator inheritance, canLogin()), file_record.hpp (isOwnedBy), transfer.hpp (Status enum + markDownloaded), download_token.hpp (validFor checks bind+revoked+expiry+maxUses), permission.hpp, audit_event.hpp. User throws ValidationException from exceptions.hpp.
+**Good:** 2/2 tests pass (OwnershipAndTransfer, TokenBind). Fixed missing exceptions.hpp include in user.hpp after build error.
+**Bad:** Initial build failed due to missing include; self-corrected in same step.
+**Tests:** `cmake -B build -S . && cmake --build build --config Debug && ./build/sft_tests --gtest_filter='Entities.*'` (2/2 PASS)
+**Context checkpoint:** 28%
