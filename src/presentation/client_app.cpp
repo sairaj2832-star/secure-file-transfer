@@ -20,6 +20,9 @@ int ClientApp::run(const std::string& ip, uint16_t port) {
   // seed users
   svc.addUser("alice"); svc.addUser("bob"); svc.addUser("carol");
   AuthService auth;
+  auth.regist("alice", "alice123");
+  auth.regist("bob", "bob123");
+  auth.regist("carol", "carol123");
   std::string user, pw;
   std::cout << "Login: "; std::getline(std::cin, user);
   std::cout << "Password: "; std::getline(std::cin, pw);
@@ -36,7 +39,7 @@ int ClientApp::run(const std::string& ip, uint16_t port) {
       if (!askYesNo("Upload " + fn + " for " + recip + "?")) continue;
       std::vector<uint8_t> data(1024, 'x'); // dummy
       auto up = svc.upload(UserId{user}, recip, fn, data);
-      if (up.ok) printSuccess("Uploaded, transferId: " + up.value.id.value);
+      if (up.ok && up.value.has_value()) printSuccess("Uploaded, transferId: " + up.value->id.value);
       else printError(up.error);
     } else if (c == "2") {
       auto lst = svc.listFor(UserId{user});
@@ -44,7 +47,7 @@ int ClientApp::run(const std::string& ip, uint16_t port) {
     } else if (c == "3") {
       std::string tid; std::cout << "TransferId: "; std::getline(std::cin, tid);
       auto dl = svc.download(UserId{user}, FileId{tid});
-      if (dl.ok) printSuccess("Downloaded " + std::to_string(dl.value.size()) + " bytes");
+      if (dl.ok && dl.value.has_value()) printSuccess("Downloaded " + std::to_string(dl.value->size()) + " bytes");
       else printError(dl.error);
     } else if (c == "4") break;
   }

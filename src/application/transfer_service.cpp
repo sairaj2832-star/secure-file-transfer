@@ -2,9 +2,9 @@
 #include "application/transfer_service.hpp"
 #include "domain/exceptions.hpp"
 Result<Transfer> TransferService::upload(const UserId& s, const std::string& r, const std::string& o, const std::vector<uint8_t>& b) {
-  if (!users_.count(s.value) || !users_.count(r)) return {false, Transfer{}, "unknown user"};
-  if (!validExt(o)) return {false, Transfer{}, "bad extension"};
-  if (b.size() > 100u * 1024u * 1024u) return {false, Transfer{}, "oversize"};
+  if (!users_.count(s.value) || !users_.count(r)) return Result<Transfer>::failure("unknown user");
+  if (!validExt(o)) return Result<Transfer>::failure("bad extension");
+  if (b.size() > 100u * 1024u * 1024u) return Result<Transfer>::failure("oversize");
   auto out = cr_->encrypt(b);
   std::string uuid = "uuid-" + std::to_string(++ctr_);
   st_->write(uuid, out.cipher);
@@ -14,19 +14,19 @@ Result<Transfer> TransferService::upload(const UserId& s, const std::string& r, 
   Transfer t{TransferId{"t" + std::to_string(ctr_)}, fr.id, s, UserId{r}, Transfer::Status::UPLOADED};
   trs_.emplace(t.id.value, t);
   au_->record({0, "now", s.value, "UPLOAD", fr.id.value, "", "", ""});
-  return {true, t, ""};
+  return Result<Transfer>::success(t);
 }
 Result<std::vector<uint8_t>> TransferService::download(const UserId& q, const FileId& fid) {
   auto it = files_.find(fid.value);
-  if (it == files_.end()) return {false, {}, "not found"};
+  if (it == files_.end()) return Result<std::vector<uint8_t>>::failure("not found");
   const FileRecord& fr = it->second;
   bool ok = (fr.owner == q) || grants_[fid.value].count(q.value);
-  if (!ok) { au_->record({0, "now", q.value, "DENIED", fid.value, "", "", ""}); return {false, {}, "denied"}; }
+  if (!ok) { au_->record({0, "now", q.value, "DENIED", fid.value, "", "", ""}); return Result<std::vector<uint8_t>>::failure("denied"); }
   auto cipher = st_->read(fr.storageId);
   try {
     auto plain = cr_->decryptAndVerify(cipher, fr.wrapped, fr.digest);
     au_->record({0, "now", q.value, "DOWNLOAD", fid.value, "", "", ""});
-    return {true, plain, ""};
+    return Result<std::vector<uint8_t>>::success(plain);
   } catch (const IntegrityException&) {
     au_->record({0, "now", q.value, "INTEGRITY_FAIL", fid.value, "", "", ""});
     throw;

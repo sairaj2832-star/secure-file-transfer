@@ -6,8 +6,8 @@
 #include "domain/download_token.hpp"
 TEST(Entities, OwnershipAndTransfer) {
   UserId alice{"alice"}, bob{"bob"};
-  RegularUser a(alice, "alice", "hash");
-  EXPECT_TRUE(a.canLogin());
+  RegularUser a(alice, "alice", "alice@ex.com", "user", "active");
+  EXPECT_TRUE(a.canLogin(0));
   FileRecord f{FileId{"f1"}, alice, "a.pdf", "uuid-1", 10, Digest{}, WrappedKey{}};
   EXPECT_TRUE(f.isOwnedBy(alice));
   EXPECT_FALSE(f.isOwnedBy(bob));
