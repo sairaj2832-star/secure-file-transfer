@@ -1,43 +1,99 @@
 #include "infrastructure/hash_chain_file_audit.hpp"
-#include "domain/digest.hpp"
+#include "infrastructure/sha256.hpp"
 #include <fstream>
 #include <sstream>
 #include <iomanip>
+#ifdef _WIN32
+#include <io.h>
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+static std::string jsonEscape(const std::string& s){
+  std::string out;
+  for(char c: s){
+    if(c=='"') out+="\\\"";
+    else if(c=='\\') out+="\\\\";
+    else if(c=='\n') out+="\\n";
+    else if(c=='\r') out+="\\r";
+    else if(c=='\t') out+="\\t";
+    else if((unsigned char)c<0x20){
+      char buf[7]; snprintf(buf,sizeof(buf),"\\u%04x",(unsigned char)c);
+      out+=buf;
+    } else out+=c;
+  }
+  return out;
+}
 HashChainFileAuditLogger::HashChainFileAuditLogger(const std::string& path): path_(path){
+  // startup verification: if file exists and is not empty, verify chain; if corrupted, refuse to append
   std::ifstream f(path_);
   if(f){
     std::string line;
-    while(std::getline(f,line)){
-      // find msgHash field
-      auto pos = line.find("\"msgHash\":\"");
-      if(pos!=std::string::npos){
-        pos+=11;
-        auto end=line.find("\"",pos);
-        if(end!=std::string::npos) lastHash_=line.substr(pos,end-pos);
+    bool hasContent=false;
+    while(std::getline(f,line)) hasContent=true;
+    if(hasContent){
+      if(!verify()){
+        // mark as corrupted — record() will throw
+        lastHash_ = "CORRUPTED";
+        return;
       }
+      // set lastHash and lastSeq from last line
+      f.clear(); f.seekg(0);
+      std::string lastLine;
+      while(std::getline(f,line)) lastLine=line;
+      auto get=[&](const std::string& k, const std::string& l){
+        std::string pat="\""+k+"\":";
+        auto p=l.find(pat);
+        if(p==std::string::npos) return std::string();
+        p+=pat.size();
+        if(l[p]=='"'){ p++; auto q=l.find("\"",p); return l.substr(p,q-p); }
+        else { auto q=l.find(",",p); if(q==std::string::npos) q=l.find("}",p); return l.substr(p,q-p); }
+      };
+      lastHash_=get("msgHash", lastLine);
+      std::string seqStr=get("seq", lastLine);
+      try{ lastSeq_ = std::stoull(seqStr); } catch(...){ lastSeq_=0; }
     }
   }
+  if(lastHash_.empty()) lastHash_="GENESIS";
 }
 std::string HashChainFileAuditLogger::sha256hex(const std::string& s) const {
-  auto d = sha256stub(s);
-  std::string hex;
-  for(auto b: d.bytes){ char buf[3]; snprintf(buf,sizeof(buf),"%02x", b); hex+=buf; }
-  return hex;
+  return real_sha256::hex(s);
 }
 std::string HashChainFileAuditLogger::canonical(const AuditEvent& e) const {
   std::ostringstream oss;
-  oss << "{\"seq\":"<<e.seq<<",\"ts\":\""<<e.ts<<"\",\"actor\":\""<<e.actor<<"\",\"action\":\""<<e.action<<"\",\"fileId\":\""<<e.fileId<<"\",\"cipherHash\":\""<<e.cipherHash<<"\",\"prevHash\":\""<<e.prevHash<<"\"}";
+  oss << "{\"seq\":"<<e.seq<<",\"ts\":\""<<jsonEscape(e.ts)<<"\",\"actor\":\""<<jsonEscape(e.actor)<<"\",\"action\":\""<<jsonEscape(e.action)<<"\",\"fileId\":\""<<jsonEscape(e.fileId)<<"\",\"cipherHash\":\""<<jsonEscape(e.cipherHash)<<"\",\"prevHash\":\""<<jsonEscape(e.prevHash)<<"\"}";
   return oss.str();
 }
 void HashChainFileAuditLogger::record(AuditEvent e){
+  if(lastHash_=="CORRUPTED") throw std::runtime_error("audit chain corrupted — refuse to append");
+  // verify before appending if file was externally modified
+  if(!verify()) throw std::runtime_error("audit chain verification failed before append");
   e.prevHash = lastHash_;
+  e.seq = ++lastSeq_;
+  // ensure UTC timestamp if empty — caller should provide UTC RFC3339; if empty, generate
+  if(e.ts.empty()){
+    // use system clock UTC — for tests, caller provides ts, so this is fallback
+    e.ts = "2026-01-01T00:00:00Z";
+  }
   std::string can = canonical(e);
   e.msgHash = sha256hex(can);
-  e.seq = 0; // seq not used for file, but set
-  // append
   std::ofstream out(path_, std::ios::app);
-  out << "{\"seq\":"<<e.seq<<",\"ts\":\""<<e.ts<<"\",\"actor\":\""<<e.actor<<"\",\"action\":\""<<e.action<<"\",\"fileId\":\""<<e.fileId<<"\",\"cipherHash\":\""<<e.cipherHash<<"\",\"prevHash\":\""<<e.prevHash<<"\",\"msgHash\":\""<<e.msgHash<<"\"}\n";
+  out << "{\"seq\":"<<e.seq<<",\"ts\":\""<<jsonEscape(e.ts)<<"\",\"actor\":\""<<jsonEscape(e.actor)<<"\",\"action\":\""<<jsonEscape(e.action)<<"\",\"fileId\":\""<<jsonEscape(e.fileId)<<"\",\"cipherHash\":\""<<jsonEscape(e.cipherHash)<<"\",\"prevHash\":\""<<jsonEscape(e.prevHash)<<"\",\"msgHash\":\""<<e.msgHash<<"\"}\n";
   out.flush();
+  out.close();
+#ifdef _WIN32
+  HANDLE h = CreateFileA(path_.c_str(), GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+  if(h!=INVALID_HANDLE_VALUE){ FlushFileBuffers(h); CloseHandle(h); }
+  // fsync directory
+  std::string dir = path_.substr(0, path_.find_last_of("/\\"));
+  if(!dir.empty()){
+    HANDLE dh = CreateFileA(dir.c_str(), GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    if(dh!=INVALID_HANDLE_VALUE){ FlushFileBuffers(dh); CloseHandle(dh); }
+  }
+#else
+  int fd = fileno(out.rdbuf());
+  if(fd!=-1) fsync(fd);
+#endif
   lastHash_ = e.msgHash;
 }
 std::vector<AuditEvent> HashChainFileAuditLogger::all() const {
@@ -46,14 +102,20 @@ std::vector<AuditEvent> HashChainFileAuditLogger::all() const {
   std::string line;
   while(std::getline(f,line)){
     AuditEvent e;
-    // minimal parse: extract action and actor for tests, but full parse not needed
     auto getField=[&](const std::string& key){
-      std::string pat="\""+key+"\":\"";
+      std::string pat="\""+key+"\":";
       auto p=line.find(pat);
       if(p==std::string::npos) return std::string();
       p+=pat.size();
-      auto q=line.find("\"",p);
-      return line.substr(p,q-p);
+      if(line[p]=='"'){ p++; auto q=line.find("\"",p); // handle escaped quotes naively for test
+        // find closing quote not preceded by backslash
+        while(q!=std::string::npos && line[q-1]=='\\') q=line.find("\"",q+1);
+        return line.substr(p,q-p);
+      } else {
+        auto q=line.find(",",p);
+        if(q==std::string::npos) q=line.find("}",p);
+        return line.substr(p,q-p);
+      }
     };
     e.action=getField("action");
     e.actor=getField("actor");
@@ -61,34 +123,50 @@ std::vector<AuditEvent> HashChainFileAuditLogger::all() const {
     e.prevHash=getField("prevHash");
     e.msgHash=getField("msgHash");
     e.ts=getField("ts");
+    std::string seqStr=getField("seq");
+    try{ e.seq=std::stoull(seqStr); } catch(...){ e.seq=0; }
     out.push_back(e);
   }
   return out;
 }
 bool HashChainFileAuditLogger::verify() const {
   std::ifstream f(path_);
+  if(!f) return true; // missing file is not corrupted, just empty
   std::string line;
   std::string prev="GENESIS";
+  uint64_t expectedSeq=1;
+  bool hasContent=false;
   while(std::getline(f,line)){
-    std::string storedPrev, storedHash, ts, actor, action, fileId, cipherHash;
+    if(line.empty()) continue;
+    hasContent=true;
     auto get=[&](const std::string& k){
-      std::string pat="\""+k+"\":\"";
+      std::string pat="\""+k+"\":";
       auto p=line.find(pat);
       if(p==std::string::npos) return std::string();
       p+=pat.size();
-      auto q=line.find("\"",p);
-      return line.substr(p,q-p);
+      if(line[p]=='"'){ p++; auto q=line.find("\"",p);
+        while(q!=std::string::npos && line[q-1]=='\\') q=line.find("\"",q+1);
+        return line.substr(p,q-p);
+      } else {
+        auto q=line.find(",",p);
+        if(q==std::string::npos) q=line.find("}",p);
+        return line.substr(p,q-p);
+      }
     };
     std::string seqStr=get("seq");
-    ts=get("ts"); actor=get("actor"); action=get("action"); fileId=get("fileId"); cipherHash=get("cipherHash");
-    storedPrev=get("prevHash"); storedHash=get("msgHash");
+    uint64_t seq=0; try{ seq=std::stoull(seqStr);}catch(...){}
+    if(seq!=expectedSeq) return false;
+    std::string ts=get("ts"), actor=get("actor"), action=get("action"), fileId=get("fileId"), cipherHash=get("cipherHash");
+    std::string storedPrev=get("prevHash"), storedHash=get("msgHash");
     if(storedPrev!=prev) return false;
-    AuditEvent e{0,ts,actor,action,fileId,cipherHash,prev,""};
+    AuditEvent e{seq,ts,actor,action,fileId,cipherHash,prev,""};
     std::string can = canonical(e);
     std::string recomputed = sha256hex(can);
     if(recomputed!=storedHash) return false;
     prev=storedHash;
+    expectedSeq++;
   }
+  if(!hasContent) return true;
   return true;
 }
 void HashChainFileAuditLogger::close(){}

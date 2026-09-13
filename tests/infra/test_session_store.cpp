@@ -36,10 +36,10 @@ TEST(SessionStore, TokenIsCSPRNGNotUsername) {
   auto t2 = ss.createForUser(UserId{"alice"}, 0);
   EXPECT_NE(t1.value, t2.value);
   EXPECT_EQ(t1.value.find("alice"), std::string::npos);
-  EXPECT_EQ(t1.value.rfind("dl_", 0), 0u);
+  EXPECT_EQ(t1.value.rfind("sess_", 0), 0u);
 }
 TEST(SessionStore, RevokedFieldModel) {
-  Session s{SessionId{"dl_test"}, UserId{"u1"}, 1000, 5000, false};
+  Session s{SessionId{"sess_test"}, UserId{"u1"}, 1000, 5000, false};
   EXPECT_TRUE(s.isValid(2000));
   s.revoked = true;
   EXPECT_FALSE(s.isValid(2000));

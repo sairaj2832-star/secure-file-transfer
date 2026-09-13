@@ -9,10 +9,14 @@
 class AdminService {
  public:
   AdminService(IUserRepository* r, ISessionStore* s, IAuditLogger* a, IClock* c): repo_(r), sessions_(s), audit_(a), clock_(c) {}
+  Result<UserId> activate(const SessionId& adminToken, const UserId& target);
+  Result<UserId> deactivate(const SessionId& adminToken, const UserId& target);
+  // legacy overload for tests that pass UserId directly (deprecated, will be removed)
   Result<UserId> activate(const UserId& adminId, const UserId& target);
   Result<UserId> deactivate(const UserId& adminId, const UserId& target);
  private:
   bool isAdmin(const UserId& id) const;
+  bool isAdminSession(const SessionId& token, UserId& outAdminId) const;
   int countActiveAdmins() const;
   IUserRepository* repo_; ISessionStore* sessions_; IAuditLogger* audit_; IClock* clock_;
 };

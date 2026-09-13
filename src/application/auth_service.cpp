@@ -2,6 +2,7 @@
 #include "domain/exceptions.hpp"
 Result<UserId> AuthService::registerUser(const std::string& u, const std::string& email, const std::string& pw, const std::string& role){
   if (u.empty() || email.empty() || pw.size()<8) return Result<UserId>::failure("Registration failed");
+  // pre-check for generic error, but rely on DB constraints for race safety
   if (repo_->findByUsername(u).ok || repo_->findByEmail(email).ok){
     audit_->record({0,"", "system", AuditAction::REGISTER_FAIL, "", "", "", ""});
     return Result<UserId>::failure("Registration failed");
@@ -9,7 +10,15 @@ Result<UserId> AuthService::registerUser(const std::string& u, const std::string
   std::string encoded = hasher_->hash(pw);
   UserId newId = generateUserId();
   User nu(newId, u, email, role, "active");
-  repo_->save(nu, encoded);
+  try{
+    repo_->save(nu, encoded);
+  } catch(const ValidationException&){
+    audit_->record({0,"", "system", AuditAction::REGISTER_FAIL, "", "", "", ""});
+    return Result<UserId>::failure("Registration failed");
+  } catch(const std::exception&){
+    audit_->record({0,"", "system", AuditAction::REGISTER_FAIL, "", "", "", ""});
+    return Result<UserId>::failure("Registration failed");
+  }
   audit_->record({0,"", u, AuditAction::REGISTER_OK, "", "", "", ""});
   return Result<UserId>::success(newId);
 }

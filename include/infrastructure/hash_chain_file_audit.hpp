@@ -12,6 +12,7 @@ class HashChainFileAuditLogger : public IAuditLogger {
  private:
   std::string path_;
   mutable std::string lastHash_ = "GENESIS";
+  mutable uint64_t lastSeq_ = 0;
   std::string canonical(const AuditEvent& e) const;
   std::string sha256hex(const std::string& s) const;
 };

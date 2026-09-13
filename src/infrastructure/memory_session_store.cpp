@@ -1,33 +1,24 @@
 #include "infrastructure/memory_session_store.hpp"
 #include "domain/ids.hpp"
-#include "domain/digest.hpp"
+#include "infrastructure/sha256.hpp"
 #include <random>
 #include <sstream>
 #include <iomanip>
 std::string MemorySessionStore::hashToken(const std::string& t) const {
-  // SHA256 via sha256stub for now (deterministic, not cryptographic, but suffices for store key)
-  // Real implementation should use OpenSSL SHA256
-  auto d = sha256stub(t);
-  std::string s;
-  s.reserve(64);
-  for(auto b: d.bytes) {
-    char buf[3]; snprintf(buf,sizeof(buf),"%02x", b);
-    s+=buf;
-  }
-  return s;
+  return real_sha256::hex(t);
 }
 SessionId MemorySessionStore::createForUser(const UserId& uid, int64_t now){
-  // CSPRNG 32B hex -> dl_ prefix
+  // CSPRNG: std::random_device on Windows uses BCryptGenRandom (CSPRNG)
   std::random_device rd;
-  std::mt19937 gen(rd());
-  std::uniform_int_distribution<int> dis(0,255);
+  unsigned char buf[32];
+  for(int i=0;i<32;i++) buf[i]= static_cast<unsigned char>(rd() & 0xFF);
   std::string raw;
   raw.reserve(64);
   for(int i=0;i<32;i++){
-    char buf[3]; snprintf(buf,sizeof(buf),"%02x", dis(gen));
-    raw+=buf;
+    char tmp[3]; snprintf(tmp,sizeof(tmp),"%02x", buf[i]);
+    raw+=tmp;
   }
-  std::string token = "dl_" + raw;
+  std::string token = "sess_" + raw;
   std::string h = hashToken(token);
   Session s{SessionId{token}, uid, now, now+3600*1000, false};
   byHash_[h]=s;
