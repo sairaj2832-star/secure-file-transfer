@@ -1,5 +1,17 @@
 build/
+build-*/
 .superpowers/
 storage/
+certs/server.key
+certs/server.crt
 *.user
+*.log
+*.db
+*.db-wal
+*.db-shm
+docs/superpowers/plans/*.tmp
+OOPS*.pdf
+*.pdf
+.DS_Store
+Thumbs.db
 

@@ -13,6 +13,7 @@ class IUserRepository {
   virtual void save(const User& u, const std::string& encodedHash) = 0;
   virtual void update(const User& u) = 0;
   virtual void updateHash(const UserId& id, const std::string& newEncodedHash) = 0;
+  virtual void recordLoginFailure(const UserId& id, int64_t now) = 0;
   virtual void recordLoginFailure(const UserId& id, int newFailed, int64_t newLockUntil) = 0;
   virtual void resetLoginFailures(const UserId& id) = 0;
   virtual std::string getEncodedHash(const UserId& id) const = 0;

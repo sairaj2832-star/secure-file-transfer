@@ -40,6 +40,13 @@ void MemoryUserRepository::updateHash(const UserId& id, const std::string& h){
   if (!usersById_.count(id.value)) throw NotFoundException("not found");
   hashById_[id.value] = h;
 }
+void MemoryUserRepository::recordLoginFailure(const UserId& id, int64_t now){
+  auto it = usersById_.find(id.value);
+  if (it == usersById_.end()) throw NotFoundException("not found");
+  int fails = it->second.failedAttempts() + 1;
+  int64_t lockout = fails >=5 ? now + 15*60*1000 : it->second.lockoutUntil();
+  it->second.setLockout(lockout, fails);
+}
 void MemoryUserRepository::recordLoginFailure(const UserId& id, int f, int64_t until){
   auto it = usersById_.find(id.value);
   if (it == usersById_.end()) throw NotFoundException("not found");

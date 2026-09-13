@@ -30,9 +30,7 @@ Result<SessionId> AuthService::login(const std::string& u, const std::string& pw
   if (!user.canLogin(now)){ audit_->record({0,"", u, AuditAction::LOGIN_FAIL, "", "", "", ""}); return Result<SessionId>::failure("Login failed"); }
   std::string enc = repo_->getEncodedHash(user.id());
   if (!hasher_->verify(enc, pw)){
-    int fails = user.failedAttempts()+1;
-    int64_t lockout = fails>=MAX_FAILS ? now+LOCKOUT_MS : user.lockoutUntil();
-    repo_->recordLoginFailure(user.id(), fails, lockout);
+    repo_->recordLoginFailure(user.id(), now);
     audit_->record({0,"", u, AuditAction::LOGIN_FAIL, "", "", "", ""});
     return Result<SessionId>::failure("Login failed");
   }

@@ -92,18 +92,55 @@ void SqliteUserRepository::updateHash(const UserId& id, const std::string& h){
   sqlite3_bind_text(stmt,2,id.value.c_str(),-1,SQLITE_TRANSIENT);
   sqlite3_step(stmt); sqlite3_finalize(stmt); exec("COMMIT;");
 }
+void SqliteUserRepository::recordLoginFailure(const UserId& id, int64_t now){
+  exec("BEGIN IMMEDIATE;");
+  const char* sel="SELECT failed_attempts, lockout_until FROM users WHERE id=?;";
+  sqlite3_stmt* stmt=nullptr;
+  if(sqlite3_prepare_v2(db_, sel, -1, &stmt, nullptr)!=SQLITE_OK){ exec("ROLLBACK;"); throw std::runtime_error("prepare failed"); }
+  sqlite3_bind_text(stmt,1,id.value.c_str(),-1,SQLITE_TRANSIENT);
+  int fails=0; int64_t lockout=0;
+  if(sqlite3_step(stmt)==SQLITE_ROW){
+    fails = sqlite3_column_int(stmt,0);
+    lockout = sqlite3_column_int64(stmt,1);
+  } else { sqlite3_finalize(stmt); exec("ROLLBACK;"); throw NotFoundException("not found"); }
+  sqlite3_finalize(stmt);
+  fails++;
+  int64_t newLockout = fails>=5 ? now + 15*60*1000 : lockout;
+  const char* upd="UPDATE users SET failed_attempts=?, lockout_until=? WHERE id=?;";
+  if(sqlite3_prepare_v2(db_, upd, -1, &stmt, nullptr)!=SQLITE_OK){ exec("ROLLBACK;"); throw std::runtime_error("prepare failed"); }
+  sqlite3_bind_int(stmt,1,fails);
+  sqlite3_bind_int64(stmt,2,newLockout);
+  sqlite3_bind_text(stmt,3,id.value.c_str(),-1,SQLITE_TRANSIENT);
+  int rc=sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  if(rc!=SQLITE_DONE){ exec("ROLLBACK;"); throw std::runtime_error("update failed"); }
+  if(sqlite3_changes(db_)!=1){ exec("ROLLBACK;"); throw std::runtime_error("no row updated"); }
+  exec("COMMIT;");
+}
 void SqliteUserRepository::recordLoginFailure(const UserId& id, int f, int64_t until){
   exec("BEGIN IMMEDIATE;");
   const char* sql="UPDATE users SET failed_attempts=?, lockout_until=? WHERE id=?;";
   sqlite3_stmt* stmt=nullptr;
-  sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
+  if(sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr)!=SQLITE_OK){ exec("ROLLBACK;"); throw std::runtime_error("prepare failed"); }
   sqlite3_bind_int(stmt,1,f);
   sqlite3_bind_int64(stmt,2,until);
   sqlite3_bind_text(stmt,3,id.value.c_str(),-1,SQLITE_TRANSIENT);
-  sqlite3_step(stmt); sqlite3_finalize(stmt); exec("COMMIT;");
+  int rc=sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  if(rc!=SQLITE_DONE){ exec("ROLLBACK;"); throw std::runtime_error("update failed"); }
+  if(sqlite3_changes(db_)!=1){ exec("ROLLBACK;"); throw std::runtime_error("no row updated"); }
+  exec("COMMIT;");
 }
 void SqliteUserRepository::resetLoginFailures(const UserId& id){
-  recordLoginFailure(id,0,0);
+  exec("BEGIN IMMEDIATE;");
+  const char* sql="UPDATE users SET failed_attempts=0, lockout_until=0 WHERE id=?;";
+  sqlite3_stmt* stmt=nullptr;
+  if(sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr)!=SQLITE_OK){ exec("ROLLBACK;"); throw std::runtime_error("prepare failed"); }
+  sqlite3_bind_text(stmt,1,id.value.c_str(),-1,SQLITE_TRANSIENT);
+  int rc=sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  if(rc!=SQLITE_DONE){ exec("ROLLBACK;"); throw std::runtime_error("reset failed"); }
+  exec("COMMIT;");
 }
 std::string SqliteUserRepository::getEncodedHash(const UserId& id) const {
   const char* sql="SELECT pass_hash FROM users WHERE id=?;";

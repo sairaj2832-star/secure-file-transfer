@@ -1,0 +1,48 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "server",
+      "displayName": "Server (dedicated laptop, port 5000, real TLS)",
+      "description": "Builds sft_server with SQLite+Argon2+OpenSSL TLS 1.3. Generates certs if missing, creates storage/. Run on server laptop only.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-server",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "OPENSSL_ROOT_DIR": "C:/vcpkg/installed/x64-mingw-dynamic",
+        "CMAKE_TLS_VERIFY": "ON"
+      }
+    },
+    {
+      "name": "client",
+      "displayName": "Client (Alice/Bob/Carol laptops)",
+      "description": "Builds sft_client with Asio TLS. Expects server IP via --server. No DB, no Argon2 link needed beyond sft_app.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-client",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "OPENSSL_ROOT_DIR": "C:/vcpkg/installed/x64-mingw-dynamic",
+        "CMAKE_TLS_VERIFY": "ON"
+      }
+    },
+    {
+      "name": "ci-loopback",
+      "displayName": "CI Loopback (one laptop, ephemeral, simulated if no OpenSSL)",
+      "description": "For ctest on single machine. Uses ephemeral ports, Falls back to simulated TLS if OpenSSL not found.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "server", "configurePreset": "server", "targets": ["sft_server"] },
+    { "name": "client", "configurePreset": "client", "targets": ["sft_client"] },
+    { "name": "all", "configurePreset": "ci-loopback", "targets": ["sft_server", "sft_client", "sft_tests"] }
+  ],
+  "testPresets": [
+    { "name": "server", "configurePreset": "server", "output": {"outputOnFailure": true} },
+    { "name": "client", "configurePreset": "client", "output": {"outputOnFailure": true} }
+  ]
+}

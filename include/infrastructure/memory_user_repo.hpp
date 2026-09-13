@@ -10,6 +10,7 @@ class MemoryUserRepository : public IUserRepository {
   void save(const User& u, const std::string& encodedHash) override;
   void update(const User& u) override;
   void updateHash(const UserId& id, const std::string& h) override;
+  void recordLoginFailure(const UserId& id, int64_t now) override;
   void recordLoginFailure(const UserId& id, int f, int64_t until) override;
   void resetLoginFailures(const UserId& id) override;
   std::string getEncodedHash(const UserId& id) const override;

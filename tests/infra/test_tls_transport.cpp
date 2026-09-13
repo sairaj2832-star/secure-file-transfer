@@ -36,8 +36,14 @@ TEST(TlsTransport, RealCertConnectSucceeds) {
 TEST(TlsTransport, MismatchedFingerprintFailsClientSide) {
   auto good = testTrust();
   auto bad = good; bad.fingerprint = "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00";
+  AsioTlsListener listener(good);
+  uint16_t port = listener.listen(0);
+  std::thread srv([&]{ try{ auto c=listener.accept(); Frame f; c->recvFrame(f,1000);}catch(...){} });
   AsioTlsTransport client(bad);
-  EXPECT_THROW(client.connect("127.0.0.1", 50000), TransportException);
+  EXPECT_THROW(client.connect("127.0.0.1", port), TransportException);
+  // client-side fingerprint mismatch is audited on client, not server
+  if(srv.joinable()) srv.join();
+  listener.close();
 }
 TEST(TlsTransport, NoVerifyNoneInProd) {
   auto readSrc = [](const std::string& rel){

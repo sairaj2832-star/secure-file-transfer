@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <vector>
 #include <string>
-enum class MsgType : uint8_t { HELLO=1, AUTH=2, REGISTER=3, LOGOUT=4, ADMIN_ACTIVATE=5, ADMIN_DEACTIVATE=6, UPLOAD_INIT=7, DATA=8, COMMIT=9, DOWNLOAD_REQ=10, LIST=11, REVOKE=12, ERROR=255 };
+enum class MsgType : uint8_t { HELLO=1, AUTH=2, REGISTER=3, LOGOUT=4, ADMIN_ACTIVATE=5, ADMIN_DEACTIVATE=6, UPLOAD_INIT=7, DATA=8, COMMIT=9, DOWNLOAD_REQ=10, LIST=11, REVOKE=12, ERR=255 };
 struct Frame { MsgType type = MsgType::HELLO; uint32_t requestId = 0; std::vector<uint8_t> body; };
 inline void put32be(std::vector<uint8_t>& v, uint32_t x) { v.push_back((x>>24)&0xFF); v.push_back((x>>16)&0xFF); v.push_back((x>>8)&0xFF); v.push_back(x&0xFF); }
 inline uint32_t get32be(const uint8_t* p) { return (uint32_t(p[0])<<24)|(uint32_t(p[1])<<16)|(uint32_t(p[2])<<8)|uint32_t(p[3]); }

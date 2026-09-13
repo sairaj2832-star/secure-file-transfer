@@ -3,6 +3,8 @@
 #include <fstream>
 #include <sstream>
 #include <iomanip>
+#include <chrono>
+#include <ctime>
 #ifdef _WIN32
 #include <io.h>
 #include <windows.h>
@@ -66,14 +68,15 @@ std::string HashChainFileAuditLogger::canonical(const AuditEvent& e) const {
 }
 void HashChainFileAuditLogger::record(AuditEvent e){
   if(lastHash_=="CORRUPTED") throw std::runtime_error("audit chain corrupted — refuse to append");
-  // verify before appending if file was externally modified
   if(!verify()) throw std::runtime_error("audit chain verification failed before append");
   e.prevHash = lastHash_;
   e.seq = ++lastSeq_;
-  // ensure UTC timestamp if empty — caller should provide UTC RFC3339; if empty, generate
   if(e.ts.empty()){
-    // use system clock UTC — for tests, caller provides ts, so this is fallback
-    e.ts = "2026-01-01T00:00:00Z";
+    auto now = std::chrono::system_clock::now();
+    std::time_t t = std::chrono::system_clock::to_time_t(now);
+    std::tm gm = *std::gmtime(&t);
+    char buf[32]; std::strftime(buf,sizeof(buf),"%Y-%m-%dT%H:%M:%SZ",&gm);
+    e.ts = buf;
   }
   std::string can = canonical(e);
   e.msgHash = sha256hex(can);
