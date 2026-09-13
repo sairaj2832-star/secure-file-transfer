@@ -8,6 +8,10 @@
 #include "infrastructure/memory_storage.hpp"
 #include "infrastructure/vector_audit.hpp"
 #include "infrastructure/fake_transport.hpp"
+#include "infrastructure/fake_hasher.hpp"
+#include "infrastructure/memory_user_repo.hpp"
+#include "infrastructure/memory_session_store.hpp"
+#include "domain/clock.hpp"
 #include "ports/transport.hpp"
 #include <iostream>
 int ClientApp::run(const std::string& ip, uint16_t port) {
@@ -19,10 +23,15 @@ int ClientApp::run(const std::string& ip, uint16_t port) {
   TransferService svc(&st, &cr, &au);
   // seed users
   svc.addUser("alice"); svc.addUser("bob"); svc.addUser("carol");
-  AuthService auth;
-  auth.regist("alice", "alice123");
-  auth.regist("bob", "bob123");
-  auth.regist("carol", "carol123");
+  MemoryUserRepository userRepo;
+  FakeHasher hasher;
+  FakeClock clock(0);
+  MemorySessionStore sessions(&clock);
+  VectorAudit authAudit;
+  AuthService auth(&userRepo, &hasher, &sessions, &authAudit, &clock);
+  auth.registerUser("alice", "alice@ex.com", "alice123");
+  auth.registerUser("bob", "bob@ex.com", "bob123");
+  auth.registerUser("carol", "carol@ex.com", "carol123");
   std::string user, pw;
   std::cout << "Login: "; std::getline(std::cin, user);
   std::cout << "Password: "; std::getline(std::cin, pw);
