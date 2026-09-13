@@ -4,7 +4,16 @@ project(secure_file_transfer C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POLICY_DEFAULT_CMP0135 NEW)
-set(CMAKE_TLS_VERIFY 0)
+set(CMAKE_TLS_VERIFY ON)
+# CA bundle must be provided by developer environment. Configure via -DCMAKE_TLS_CAINFO=/path/to/ca-bundle.crt
+# Do not hardcode a specific Git installation path; document in certs/README.md that valid CA verification is required.
+# Attempt to locate common CA bundles if not explicitly set (not a hardcoded Git path, but a search).
+if(NOT DEFINED CMAKE_TLS_CAINFO)
+  find_file(AUTO_CA_BUNDLE ca-bundle.crt PATHS "C:/Program Files/Git/mingw64/etc/ssl/certs" "C:/mingw64/etc/ssl/certs" "/etc/ssl/certs" "/usr/local/etc/openssl/certs")
+  if(AUTO_CA_BUNDLE)
+    set(CMAKE_TLS_CAINFO "${AUTO_CA_BUNDLE}")
+  endif()
+endif()
 include(FetchContent)
 FetchContent_Declare(googletest
   GIT_REPOSITORY https://github.com/google/googletest.git
