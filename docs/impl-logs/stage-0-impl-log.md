@@ -46,3 +46,11 @@
 **Bad:** Asio target linking failed (header-only); removed target_link_libraries asio. Initial compile errors for missing string, deprecated deadline_timer.
 **Tests:** `cmake -B build -S . && cmake --build build --config Debug && ./build/sft_tests --gtest_filter='Framing.*'` (1/1 PASS)
 **Context checkpoint:** 60%
+
+## Step 6 — 2026-09-13 Task 6 — STL+ANSI CLI + client/server exes (Yes/No only)
+**Intent:** Build Yes/No ANSI CLI with colors/progress, ClientApp/ServerApp using FakeTransport loopback, mains parsing --server/--port/--help.
+**Approach:** Created ansi.hpp (colors, progressBar), cli.hpp (askYesNo, printSuccess/Error), client_app.hpp/.cpp (menu-driven loop with upload/list/download), server_app.hpp/.cpp (stub prints IPv4+fingerprint). Updated mains to parse args and delegate. Added sft_app link to sft_server/sft_client.
+**Good:** 1/1 test pass (Cli.YesNo). Exes print correct help. ANSI colors work in Windows Terminal. Fixed missing includes (<cstdint>, ansi.hpp), signature mismatches.
+**Bad:** Multiple compile errors for missing includes, signature mismatches (uint16_t vs int); all fixed in same step.
+**Tests:** `cmake -B build -S . && cmake --build build --config Debug && ./build/sft_tests --gtest_filter='Cli.*'` (1/1 PASS); `sft_server --help`, `sft_client --help` correct.
+**Context checkpoint:** 70%
