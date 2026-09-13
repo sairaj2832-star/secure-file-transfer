@@ -38,3 +38,11 @@
 **Bad:** Initial link failure due to missing src in CMake; fixed by adding file(GLOB APP_SRCS) and sft_app library.
 **Tests:** `cmake -B build -S . && cmake --build build --config Debug && ./build/sft_tests --gtest_filter='Policy.*:TransferSvc.*'` (2/2 PASS)
 **Context checkpoint:** 50%
+
+## Step 5 — 2026-09-13 Task 5 (Lane-C) — Framing + ITransport + Asio plain TCP :5000
+**Intent:** Define wire framing [uint32 BE len][type(1)][requestId(4BE)][body], ITransport interface, FakeTransport (in-memory queue), AsioTcpTransport (blocking Asio plain TCP with rxBuf_ accumulator).
+**Approach:** Created transport.hpp (Frame, encodeFrame, tryDecode, ITransport), fake_transport.hpp (static queue pair), asio_transport.hpp/.cpp (pimpl + steady_timer + read_some loop). Asio standalone is header-only; added include path manually. Fixed missing <string> include, deadline_timer→steady_timer migration, rxBuf_ in Impl.
+**Good:** 1/1 test pass (Framing.SplitCoalesced). Split/coalesced frame delivery handled correctly.
+**Bad:** Asio target linking failed (header-only); removed target_link_libraries asio. Initial compile errors for missing string, deprecated deadline_timer.
+**Tests:** `cmake -B build -S . && cmake --build build --config Debug && ./build/sft_tests --gtest_filter='Framing.*'` (1/1 PASS)
+**Context checkpoint:** 60%

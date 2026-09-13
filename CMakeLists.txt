@@ -13,7 +13,7 @@ FetchContent_Declare(asio
   GIT_REPOSITORY https://github.com/chriskohlhoff/asio.git
   GIT_TAG asio-1-30-2
 )
-FetchContent_MakeAvailable(googletest)
+FetchContent_MakeAvailable(googletest asio)
 add_executable(sft_server server/main.cpp)
 add_executable(sft_client client/main.cpp)
 target_include_directories(sft_server PRIVATE include)
@@ -22,7 +22,7 @@ enable_testing()
 file(GLOB APP_SRCS src/*/*.cpp src/*/*/*.cpp)
 file(GLOB TEST_SRCS tests/*/*.cpp)
 add_library(sft_app STATIC ${APP_SRCS})
-target_include_directories(sft_app PRIVATE include)
+target_include_directories(sft_app PRIVATE include ${CMAKE_BINARY_DIR}/_deps/asio-src/asio/include)
 add_executable(sft_tests ${TEST_SRCS})
 target_include_directories(sft_tests PRIVATE include)
 target_link_libraries(sft_tests PRIVATE gtest_main sft_app)
