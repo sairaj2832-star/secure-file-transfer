@@ -30,3 +30,11 @@
 **Bad:** None.
 **Tests:** `cmake -B build -S . && cmake --build build --config Debug && ./build/sft_tests --gtest_filter='Fakes.*'` (2/2 PASS)
 **Context checkpoint:** 38%
+
+## Step 4 — 2026-09-13 Task 4 — PolicyEngine + AuthService + TransferService
+**Intent:** Implement application services orchestrating domain rules with fake adapters: PolicyEngine (owner+grant authz), AuthService (registration/login with FNV stub hash), TransferService (upload/download with extension validation, encryption, audit).
+**Approach:** Created 3 headers under include/application/ and 2 cpp files under src/application/. TransferService uses injected IStorage/IEncryptionProvider/IAuditLogger; validates recipient exists, extension (pdf/png/jpg/zip/txt), size ≤100MB; records UPLOAD/DOWNLOAD/DENIED/INTEGRITY_FAIL audit events; throws IntegrityException on tamper. AuthService hash is FNV stub (Stage-2 debt: Argon2id).
+**Good:** 2/2 tests pass (OwnerRecipientStranger, AliceBobCarolFlow). Added sft_app static library to CMake for src compilation.
+**Bad:** Initial link failure due to missing src in CMake; fixed by adding file(GLOB APP_SRCS) and sft_app library.
+**Tests:** `cmake -B build -S . && cmake --build build --config Debug && ./build/sft_tests --gtest_filter='Policy.*:TransferSvc.*'` (2/2 PASS)
+**Context checkpoint:** 50%
