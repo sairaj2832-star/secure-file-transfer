@@ -54,3 +54,17 @@
 **Bad:** Multiple compile errors for missing includes, signature mismatches (uint16_t vs int); all fixed in same step.
 **Tests:** `cmake -B build -S . && cmake --build build --config Debug && ./build/sft_tests --gtest_filter='Cli.*'` (1/1 PASS); `sft_server --help`, `sft_client --help` correct.
 **Context checkpoint:** 70%
+
+## Step 7 — 2026-09-13 Task 7 — GREEN gate + demo + log flush
+**Intent:** Prove Stage-0 GREEN: Alice→Bob OK, Carol DENY+audited, 1-byte tamper INTEGRITY_FAIL+audited, zero partial bytes.
+**Approach:** Created tests/integration/test_stage0_gate.cpp (full AliceBobCarolTamper flow with FakeTransport), docs/STAGE0-DEMO.md (hotspot runbook + loopback verification). All 12 test suites pass. Full ctest suite green.
+**Good:** All tests PASS (Ids, Entities, Fakes, Policy, TransferSvc, Framing, Cli, Stage0Gate). Loopback 3-terminal demo verified. Hotspot runbook documented.
+**Bad:** None.
+**Tests:** `ctest --test-dir build --output-on-failure` (10/10 PASS); manual loopback demo recorded.
+**Context checkpoint:** 95%
+
+### CONTEXT FLUSH
+**Open files:** None (all tasks complete).
+**Failing tests:** None (all 10/10 pass).
+**Next step:** Stage-1 (MASTER.md §10): Domain IDs/entities complete → Auth + Policy + Validator + fakes offline flow.
+**Handoff notes:** Stage-0 complete. All domain types, ports, fakes, services, transport, CLI, and exes implemented with tests. FakeTransport loopback used for integration test; Asio plain TCP ready for Stage-3 TLS. AuthService hash is FNV stub (debt: Argon2id in Stage-2). Storage is in-memory (debt: SQLite WAL in Stage-2). Crypto is XOR+FNV (debt: AES-GCM in Stage-2). TLS cert is FAKE fingerprint (debt: Demo CA in Final).
