@@ -14,6 +14,7 @@ if(NOT DEFINED CMAKE_TLS_CAINFO)
     set(CMAKE_TLS_CAINFO "${AUTO_CA_BUNDLE}")
   endif()
 endif()
+find_package(OpenSSL REQUIRED)
 include(FetchContent)
 FetchContent_Declare(googletest
   GIT_REPOSITORY https://github.com/google/googletest.git
@@ -21,7 +22,7 @@ FetchContent_Declare(googletest
 )
 FetchContent_Declare(asio
   GIT_REPOSITORY https://github.com/chriskohlhoff/asio.git
-  GIT_TAG asio-1-30-2
+  GIT_TAG asio-1-34-2
 )
 FetchContent_Declare(argon2
   GIT_REPOSITORY https://github.com/P-H-C/phc-winner-argon2.git
@@ -54,9 +55,41 @@ file(GLOB APP_SRCS src/*/*.cpp src/*/*/*.cpp)
 file(GLOB TEST_SRCS tests/*/*.cpp)
 add_library(sft_app STATIC ${APP_SRCS})
 target_include_directories(sft_app PRIVATE include ${CMAKE_BINARY_DIR}/_deps/asio-src/asio/include ${argon2_SOURCE_DIR}/include ${sqlite3_SOURCE_DIR})
-target_link_libraries(sft_app PRIVATE argon2 sqlite3 ws2_32 wsock32)
+if(OPENSSL_FOUND)
+  target_include_directories(sft_app PRIVATE ${OPENSSL_INCLUDE_DIR})
+  target_link_libraries(sft_app PRIVATE argon2 sqlite3 ws2_32 wsock32 OpenSSL::SSL OpenSSL::Crypto)
+else()
+  target_link_libraries(sft_app PRIVATE argon2 sqlite3 ws2_32 wsock32)
+endif()
 add_executable(sft_tests ${TEST_SRCS})
 target_include_directories(sft_tests PRIVATE include ${argon2_SOURCE_DIR}/include ${sqlite3_SOURCE_DIR} ${CMAKE_BINARY_DIR}/_deps/asio-src/asio/include)
-target_link_libraries(sft_tests PRIVATE gtest_main sft_app argon2 sqlite3 ws2_32 wsock32)
+if(OPENSSL_FOUND)
+  target_include_directories(sft_tests PRIVATE ${OPENSSL_INCLUDE_DIR})
+  target_link_libraries(sft_tests PRIVATE gtest_main sft_app argon2 sqlite3 ws2_32 wsock32 OpenSSL::SSL OpenSSL::Crypto)
+else()
+  target_link_libraries(sft_tests PRIVATE gtest_main sft_app argon2 sqlite3 ws2_32 wsock32)
+endif()
 include(GoogleTest)
 gtest_discover_tests(sft_tests)
+
+# Auto-copy OpenSSL DLLs next to exe so MinGW exe loads vcpkg's MinGW DLLs, not ShiningLight's MSVC DLLs (fixes OPENSSL_Uplink)
+if(WIN32 AND OPENSSL_FOUND)
+  # vcpkg's MinGW OpenSSL DLLs are in <root>/bin, ShiningLight's are in C:/Program Files/OpenSSL-Win64/bin
+  # Use OPENSSL_ROOT_DIR if set, otherwise derive from INCLUDE_DIR
+  if(DEFINED OPENSSL_ROOT_DIR AND EXISTS "${OPENSSL_ROOT_DIR}/bin/libcrypto-3-x64.dll")
+    set(OPENSSL_BIN_DIR "${OPENSSL_ROOT_DIR}/bin")
+  elseif(EXISTS "${OPENSSL_INCLUDE_DIR}/../bin/libcrypto-3-x64.dll")
+    get_filename_component(OPENSSL_BIN_DIR "${OPENSSL_INCLUDE_DIR}/../bin" ABSOLUTE)
+  else()
+    set(OPENSSL_BIN_DIR "")
+  endif()
+  if(OPENSSL_BIN_DIR)
+    foreach(tgt sft_server sft_client sft_tests)
+      add_custom_command(TARGET ${tgt} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OPENSSL_BIN_DIR}/libcrypto-3-x64.dll" "$<TARGET_FILE_DIR:${tgt}>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OPENSSL_BIN_DIR}/libssl-3-x64.dll" "$<TARGET_FILE_DIR:${tgt}>"
+        COMMENT "Copying OpenSSL DLLs for ${tgt} (fixes OPENSSL_Uplink)"
+      )
+    endforeach()
+  endif()
+endif()
