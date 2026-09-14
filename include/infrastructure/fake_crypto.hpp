@@ -8,7 +8,8 @@ class FakeCrypto : public IEncryptionProvider {
   EncryptOut encrypt(const std::vector<uint8_t>& p) override {
     EncryptOut o; o.cipher = p;
     for (auto& b : o.cipher) b ^= 0x5A;
-    o.wrapped = WrappedKey{1, "FAKE-XOR-FNV", {1,2,3}, {9,9}};
+    // Use new WrappedKey with valid 12-byte nonce and non-empty bytes; recipient is dummy
+    o.wrapped = WrappedKey{UserId{"fake-recipient"}, std::vector<uint8_t>(12, 0x5A), std::vector<uint8_t>(32, 0x42), "X25519-AES-GCM-Seal"};
     std::string s(p.begin(), p.end());
     o.digest = sha256stub(s);
     return o;
