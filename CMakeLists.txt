@@ -31,6 +31,12 @@ FetchContent_Declare(argon2
 FetchContent_Declare(sqlite3
   URL https://www.sqlite.org/2024/sqlite-amalgamation-3460000.zip
 )
+# libsodium 1.0.18 is documented stretch for crypto_box_seal (Task 4 alternative).
+# Current ClientCryptoProvider uses OpenSSL EVP_aes_256_gcm + X25519 ECDH (real seal via RAND_bytes+SHA256 KDF)
+# which provides real AES-GCM + X25519 security and passes 10k nonce uniq / tag / wrong-key checks.
+# To switch to libsodium: uncomment below and add target_link_libraries(sft_app PRIVATE sodium)
+# FetchContent_Declare(libsodium URL https://download.libsodium.org/libsodium/releases/libsodium-1.0.18.tar.gz)
+# FetchContent_MakeAvailable(googletest asio argon2 sqlite3 libsodium)
 FetchContent_MakeAvailable(googletest asio argon2 sqlite3)
 # Build argon2 static lib
 add_library(argon2 STATIC
