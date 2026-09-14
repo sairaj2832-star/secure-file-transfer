@@ -1,5 +1,6 @@
 #include "infrastructure/memory_session_store.hpp"
 #include "domain/ids.hpp"
+#include "domain/exceptions.hpp"
 #include "infrastructure/sha256.hpp"
 #include <random>
 #include <sstream>
@@ -49,4 +50,9 @@ bool MemorySessionStore::isValid(const SessionId& token, int64_t now) const {
   auto r = findByToken(token);
   if(!r.ok || !r.value.has_value()) return false;
   return r.value->isValid(now);
+}
+UserId MemorySessionStore::userFor(const SessionId& token) const {
+  auto r = findByToken(token);
+  if(!r.ok || !r.value.has_value()) throw AuthException("Login failed");
+  return r.value->userId;
 }

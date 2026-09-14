@@ -11,6 +11,7 @@ class MemorySessionStore : public ISessionStore {
   bool invalidate(const SessionId& token) override;
   int invalidateAllForUser(const UserId& u) override;
   bool isValid(const SessionId& token, int64_t now) const override;
+  UserId userFor(const SessionId& token) const override;
  private:
   std::string hashToken(const std::string& t) const;
   IClock* clock_;

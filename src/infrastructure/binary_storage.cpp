@@ -187,10 +187,8 @@ void BinaryFileStorage::removeStaged(const std::string& storageId) {
   auto dst = root_ + "/" + storageId;
   std::error_code ec;
   fs::remove(tmp, ec);
-  // optionally remove dst if caller wants to clean staged final? spec says removeStaged should clean tmp only.
-  // We also clean dst if exists? Keep to remove dst for convenience but not required.
-  // Do not remove dst unless it is a .part; keep dst removal separate.
-  (void)dst;
+  std::error_code ec2;
+  fs::remove(dst, ec2);
 }
 
 size_t BinaryFileStorage::sweepOrphans(const std::string& root, IFileRepository* repo) {
