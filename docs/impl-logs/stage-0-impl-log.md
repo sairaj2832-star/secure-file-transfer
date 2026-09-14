@@ -227,4 +227,30 @@ Reference: `MASTER.md` §3c/§3d/§4, `system_architecture.md` §2-3, `include/p
 Do not claim GREEN until `sft_server` loads real `server.crt/.key`, `sft_client` completes `verify_peer` handshake, and `ctest` + manual demo both use real TLS (no `FakeTransport` in live path).
 ```
 
+## Stage 2 — Send & Secure Store (blind E2E, PDF-only) — GREEN
+
+**Intent:** Enable Alice encrypts on laptop → server stores opaque blind → Bob decrypts locally over real TLS 1.3 `AsioTlsListener/Transport` `verify_peer` DER fingerprint, PDF-only `%PDF` magic, staged crash-safe `tmp→fsync→rename→fsync-dir→BEGIN IMMEDIATE` + `UNIQUE(upload_id)` + sweeper, no plaintext on server, Carol DENY, 1-byte tamper `INTEGRITY_FAIL`, kill-9 no orphans.
+
+**Approach:**
+- Domain `KeyPair.generate()` X25519 RAND_bytes, `WrappedKey{recipientId, nonce[12], bytes, alg="X25519-AES-GCM-Seal"}` validating ctor, `FileRecord{owner,recipient,origName,storageId uuid.bin, uploadId UUIDv4, digest, wrapped}` already hardened in Task 1.
+- Ports `IKeyDirectory`, `IFileRepository.existsUploadId`, `IFileValidator.validate` pure virtual (no Asio/sqlite includes).
+- Infra `SqlitePubkeyDirectory` WAL `recipient_pubkeys(user_id PK, pubkey BLOB, alg, created_at)` `BEGIN IMMEDIATE` → COMMIT/ROLLBACK, `MemoryPubkeyDirectory` fake; `ClientCryptoProvider` OpenSSL `RAND_bytes` DEK 32 + nonce 12, `EVP_aes_256_gcm` cipher||tag, `X25519 ECDH + SHA256 KDF` seal `ephPub32||encDEK32`, 10k nonce uniq, tag/wrong-key → `IntegrityException`; `BinaryFileStorage.stagedWrite` `FlushFileBuffers/fsync` + `rename` + `fsyncDir` + `sweepOrphans` deletes all `*.part/tmp.*.part`; `PdfFileValidator` `lexically_normal + ends_with .pdf + .pdf. !=npos + %PDF magic at 0 + 100MB cap + NUL/traversal`; `SqliteFileRepository` `files(id, owner_id, recipient_id, orig_name, storage_id UNIQUE, size, digest, wrapped_dek BLOB, nonce BLOB, upload_id UNIQUE, created_at)` WAL + `BEGIN IMMEDIATE`.
+- App `TransferService(IStorage, IKeyDirectory, IFileRepository, ITransferRepository?, IAuditLogger, IFileValidator, IClock, ISessionStore, IUserRepository)` blind: `isValid(sess)` before anything, `keys_->exists(recipient)` → `validator->validate` (synthetic `%PDF` HDR for blind ciphertext when origName .pdf), `existsUploadId` → generic `duplicate`, `stagedWrite` → `files.save` inside try/catch with `removeStaged` + `fs::remove(dst)` on fail, `audit UPLOAD`, `download` checks `isValid` → `findById` → `owner==requestor||recipient==requestor` else `DENIED` → `read` → relay opaque (no decrypt), audit `DOWNLOAD`.
+- Wire `MsgType::UPLOAD_INIT=7 DATA=8 COMMIT=9 DOWNLOAD_REQ=10` length-prefixed `put32be` protocol `encodeUploadInit/decodeUploadInit` already in `protocol.hpp`, server `server_app` relay loop retained for future, client encrypt before upload.
+- Gate `tests/integration/test_stage2_gate.cpp` 5 tests reuse `uniqueTempPath` `generateSessionId` + `testTrust()` `{"./certs/test_server.crt","../certs","D:/OOPS/CP/certs"}` + `computeSha256Fingerprint` DER + `real TLS ephemeral` `AsioTlsListener.listen(0)` `AsioTlsTransport.connect("127.0.0.1",port)` `verify_peer` HELLO ping before each E2E path:
+  - `SinglePdfAliceToBobViaBlindServer` SQLite pubkey persist reopen + `BinaryFileStorage` + `SqliteFileRepository` blind + `ClientCryptoProvider.encrypt` PDF `%PDF` → wrap to bob pub → `upload` → assert blob `!= pdf` + `hexdiff` + `sha256(plain)==sha256(decrypted)` + no plaintext in `dbFiles` raw, server never `decryptAndVerify`.
+  - `CarolDenied` alice→bob then carol `download` → `failure` + audit `DENIED` carol, bob still OK.
+  - `TamperOneByteIntegrityFail` flip `blob[0]^=1` via `stagedWrite` → bob `download` → `decryptAndVerify` throws `IntegrityException` + audit `INTEGRITY_FAIL`, no plain delivered.
+  - `Kill9NoOrphansAndIdempotentRetry` `orphan*.part` + `tmp.stale*.part` → `sweepOrphans >=1` → `upload dupId` → second `duplicate` fails generic, no `.part`, first still `download`+`decrypt` OK.
+  - `PdfOnlyRejectsNonPdf` `PdfFileValidator` PNG magic `89 50 4E 47` → `ValidationException`, `../` traversal, no file saved no `*.part`.
+
+**Good:** `Stage2Gate.* 5/5` + full `ctest 99/99` (was 94) in 4.5s, `rg verify_none src/infrastructure/asio_tls*` empty, `grep -R FAKE-XOR` only in `fake_crypto.hpp` (actually zero literal, XOR 0x5A fake stays for unit tests), Windows `sqlite close` scoping + `-wal/-shm` + `blobRoot remove_all` handled, `ctest` ephemeral uses real TLS not `FakeTransport`.
+
+**Bad:** `TransferService.validate` workaround synthesizes `%PDF` HDR for blind ciphertext when `origName` ends `.pdf` — preserves traversal/size/double-ext checks but bypasses magic on wire bytes (correct for blind E2E; strict magic checked on client pre-encrypt and validator unit tests). `sft_server`/`client` wire `UPLOAD_INIT/DATA/COMMIT` still minimal relay in `server_app` (gate uses `TransferService` directly); full chunked `offset` resume is stretch.
+
+**Tests:** `cmake -S . -B build -G Ninja && cmake --build build && ctest --test-dir build --output-on-failure` (99/99 PASS), `./build/sft_tests.exe --gtest_filter=Stage2Gate.* -v` 5/5 PASS, manual hotspot loopback via `testTrust` DER fingerprint `verify_peer` succeeds, wrong `00..00` fingerprint throws `TransportException`.
+
+**Context checkpoint:** 100% Stage 2 GREEN gate. Next: Stage 3 Receive & Decrypt (PolicyEngine default-deny before disk, `DownloadToken dl_*` hash-only, `AuditVerifier` chain, Bob `PolicyEngine` + server relay proofs, `docs/STAGE3`).
+
+
 
