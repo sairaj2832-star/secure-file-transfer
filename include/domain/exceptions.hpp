@@ -6,5 +6,6 @@ struct AppException : std::runtime_error { using std::runtime_error::runtime_err
 struct ValidationException : AppException { using AppException::AppException; };
 struct AuthException : AppException { using AppException::AppException; };
 struct NotFoundException : AppException { using AppException::AppException; };
+struct StorageException : AppException { using AppException::AppException; };
 struct IntegrityException : AppException { using AppException::AppException; };
 struct TransportException : AppException { using AppException::AppException; };
